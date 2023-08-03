@@ -1,0 +1,11 @@
+service:
+  host: 0.0.0.0
+  port: 8081
+
+bot:
+  token: TG_BOT_TOKEN
+
+docs:
+  spreadsheet_id: DOCS_SPREADSHEET_ID
+  token_file_name: "./secrets/token.json"
+  client_secret_file_name: "./secrets/client_secret_651391039241-4dvvnen4f3j8ib62mj672sas1hiol7r2.apps.googleusercontent.com.json"
