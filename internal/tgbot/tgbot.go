@@ -76,10 +76,7 @@ func (s *service) processState(
 	sentFromId int64,
 	state *StateContext,
 ) (tgbotapi.MessageConfig, error) {
-	msg.ReplyMarkup = tgbotapi.ReplyKeyboardRemove{
-		RemoveKeyboard: true,
-		Selective:      false,
-	}
+	msg.ReplyMarkup = s.NewMainMenuKeyboard()
 
 	msg.Text = ""
 
@@ -87,21 +84,20 @@ func (s *service) processState(
 	switch state.State {
 	case FsmStateStart:
 		msg.Text = "Привет"
-		msg.ReplyMarkup = s.NewMainMenuKeyboard()
 	case FsmStateActivate:
 		err := s.user.Activate(s.ctx, state.TgUserNameId)
 		if err != nil {
-			return msg, err
+			msg.Text = "Нет регистрации"
+			return msg, nil
 		}
 		msg.Text = "Регистрация подтверждена"
-		msg.ReplyMarkup = s.NewMainMenuKeyboard()
 	case FsmStateGet:
 		u, err := s.user.Get(s.ctx, state.TgUserNameId)
 		if err != nil {
-			return msg, err
+			msg.Text = "Нет регистрации"
+			return msg, nil
 		}
 		msg.Text = fmt.Sprintf("email: %s\nname: %s", u.Email, u.Name)
-		msg.ReplyMarkup = s.NewMainMenuKeyboard()
 	default:
 		return msg, errors.Wrapf(intererrors.ErrValidation, "failed to process state %d", state.State)
 	}
