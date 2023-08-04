@@ -1,0 +1,81 @@
+name: Go package
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
+  REPO_NAME: ${{ github.event.repository.name }}
+  TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+  DOCS_SPREADSHEET_ID: ${{ vars.DOCS_SPREADSHEET_ID }}
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.20'
+    - name: Build application
+      run: make all
+
+  build:
+    needs: test-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Decode base64 client_secret
+        uses: kitek/decode-base64-into-file-action@1.0
+        with:
+          encoded-value: ${{ secrets.DOCS_CLIENT_SECRET }}
+          destination-file: secrets/client_secret.json
+      - name: Decode base64 token
+        uses: kitek/decode-base64-into-file-action@1.0
+        with:
+          encoded-value: ${{ secrets.DOCS_TOKEN }}
+          destination-file: secrets/token.json
+      - name: Build the Docker image
+        run: docker build -t ${{ env.REPO_NAME }}:latest -f build/Dockerfile .
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_PASSWORD }}
+      - name: Push Docker image
+        run: |
+          docker tag $REPO_NAME:latest $DOCKER_USERNAME/$REPO_NAME:latest
+          docker push $DOCKER_USERNAME/$REPO_NAME:latest
+
+  deploy:
+    needs: [test-build, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ vars.YC_HOST }}
+          username: ${{ secrets.YC_USER }}
+          key: ${{ secrets.YC_PRIVATE_SSHKEY }}
+          port: 22
+          envs: TG_BOT_TOKEN,DOCS_SPREADSHEET_ID,DOCKER_USERNAME,REPO_NAME
+          script: |
+            sudo docker image pull $DOCKER_USERNAME/$REPO_NAME:latest
+            sudo docker stop secretary
+            sudo docker container prune -f
+            sudo docker image prune -af
+            sudo docker run --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -d \
+              --name="secretary" \
+              -p 8081:8081 \
+              --env TG_BOT_TOKEN=$TG_BOT_TOKEN \
+              --env DOCS_SPREADSHEET_ID=$DOCS_SPREADSHEET_ID \
+              $DOCKER_USERNAME/$REPO_NAME:latest \
+              run
+            
